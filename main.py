@@ -61,8 +61,18 @@ def get_youtube_service():
     return googleapiclient.discovery.build("youtube", "v3", credentials=creds)
 
 
-def create_youtube_playlist(youtube, title):
-    print(f"Creating YouTube playlist: {title}")
+def get_or_create_youtube_playlist(youtube, title):
+    # Check existing playlists
+    request = youtube.playlists().list(part="snippet", mine=True, maxResults=50)
+    response = request.execute()
+
+    for item in response.get("items", []):
+        if item["snippet"]["title"].strip().lower() == title.strip().lower():
+            print(f"Found existing playlist: {title}")
+            return item["id"]
+
+    # Not found, create new one
+    print(f"Creating new YouTube playlist: {title}")
     request = youtube.playlists().insert(
         part="snippet,status",
         body={
@@ -122,7 +132,7 @@ def main():
     songs = get_spotify_liked_tracks()
     processed = load_progress()
     youtube = get_youtube_service()
-    playlist_id = create_youtube_playlist(youtube, YOUTUBE_PLAYLIST_NAME)
+    playlist_id = get_or_create_youtube_playlist(youtube, YOUTUBE_PLAYLIST_NAME)
 
     for i, song in enumerate(songs, 1):
         if i in processed:
