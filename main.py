@@ -25,12 +25,15 @@ if not all(required):
     raise EnvironmentError("Missing required .env variables")
 
 # Spotify client
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=SPOTIFY_CLIENT_ID,
-    client_secret=SPOTIFY_CLIENT_SECRET,
-    redirect_uri=SPOTIFY_REDIRECT_URL,
-    scope="user-library-read"
-))
+sp = spotipy.Spotify(
+    auth_manager=SpotifyOAuth(
+        client_id=SPOTIFY_CLIENT_ID,
+        client_secret=SPOTIFY_CLIENT_SECRET,
+        redirect_uri=SPOTIFY_REDIRECT_URL,
+        scope="user-library-read",
+    )
+)
+
 
 def get_spotify_liked_tracks():
     print("Fetching liked songs from Spotify...")
@@ -38,19 +41,25 @@ def get_spotify_liked_tracks():
     offset = 0
     while True:
         batch = sp.current_user_saved_tracks(limit=50, offset=offset)
-        if not batch['items']:
+        if not batch["items"]:
             break
-        results += batch['items']
+        results += batch["items"]
         offset += 50
     print(f"Fetched {len(results)} liked songs from Spotify.")
-    return [f"{item['track']['name']} {item['track']['artists'][0]['name']}" for item in results]
+    return [
+        f"{item['track']['name']} {item['track']['artists'][0]['name']}"
+        for item in results
+    ]
+
 
 def get_youtube_service():
     scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-        "client_secrets.json", scopes)
-    creds = flow.run_local_server(port=8080, prompt='consent')
+        "client_secrets.json", scopes
+    )
+    creds = flow.run_local_server(port=8080, prompt="consent")
     return googleapiclient.discovery.build("youtube", "v3", credentials=creds)
+
 
 def create_youtube_playlist(youtube, title):
     print(f"Creating YouTube playlist: {title}")
@@ -59,26 +68,28 @@ def create_youtube_playlist(youtube, title):
         body={
             "snippet": {
                 "title": title,
-                "description": "Automatically imported from Spotify Liked Songs"
+                "description": "Automatically imported from Spotify Liked Songs",
             },
-            "status": {
-                "privacyStatus": "private"
-            }
-        }
+            "status": {"privacyStatus": "private"},
+        },
     )
     response = request.execute()
     return response["id"]
 
+
 def search_youtube_video(youtube, query):
     try:
-        request = youtube.search().list(part="snippet", q=query, maxResults=1, type="video")
+        request = youtube.search().list(
+            part="snippet", q=query, maxResults=1, type="video"
+        )
         response = request.execute()
         items = response.get("items")
         if items:
-            return items[0]['id']['videoId']
+            return items[0]["id"]["videoId"]
     except Exception as e:
         print(f"Search failed for '{query}': {e}")
     return None
+
 
 def add_video_to_playlist(youtube, playlist_id, video_id):
     try:
@@ -87,25 +98,25 @@ def add_video_to_playlist(youtube, playlist_id, video_id):
             body={
                 "snippet": {
                     "playlistId": playlist_id,
-                    "resourceId": {
-                        "kind": "youtube#video",
-                        "videoId": video_id
-                    }
+                    "resourceId": {"kind": "youtube#video", "videoId": video_id},
                 }
-            }
+            },
         ).execute()
     except Exception as e:
         print(f"Failed to add video {video_id}: {e}")
+
 
 def load_progress():
     if not os.path.exists(PROGRESS_FILE):
         return set()
     with open(PROGRESS_FILE, "r") as f:
-        return set(map(int, f.read().splitlines()))
+        return set(int(line) for line in f if line.strip())
+
 
 def save_progress(index):
     with open(PROGRESS_FILE, "a") as f:
         f.write(f"{index}\n")
+
 
 def main():
     songs = get_spotify_liked_tracks()
@@ -128,6 +139,7 @@ def main():
 
         save_progress(i)
         time.sleep(1)  # Rate limiting
+
 
 if __name__ == "__main__":
     main()
