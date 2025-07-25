@@ -4,16 +4,16 @@ import json
 import pickle
 import logging
 import asyncio
-import aiohttp
-from typing import Set, List, Dict, Any, Optional
+import aiohttp  # type: ignore
+from typing import Set, List, Dict, Any, Optional, Tuple
 
-import spotipy
+import spotipy  # type: ignore
 from dotenv import load_dotenv
-from spotipy.oauth2 import SpotifyOAuth
-import google_auth_oauthlib.flow
-import googleapiclient.discovery
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+from spotipy.oauth2 import SpotifyOAuth  # type: ignore
+import google_auth_oauthlib.flow  # type: ignore
+import googleapiclient.discovery  # type: ignore
+from google.auth.transport.requests import Request  # type: ignore
+from google.oauth2.credentials import Credentials  # type: ignore
 
 # --- Configuration ---
 PROGRESS_FILE = "progress.json"
@@ -243,7 +243,7 @@ async def process_song_worker(
 # --- Main Execution ---
 
 
-def load_progress() -> (Set[int], dict):
+def load_progress() -> Tuple[Set[int], dict]:
     # (This function is unchanged)
     if not os.path.exists(PROGRESS_FILE):
         return set(), {}
