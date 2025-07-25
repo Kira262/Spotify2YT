@@ -10,8 +10,8 @@ PROGRESS_FILE = "progress.txt"
 
 # Load .env variables
 load_dotenv()
-print("[DEBUG] Loaded SPOTIFY_CLIENT_ID:", os.getenv("SPOTIFY_CLIENT_ID"))
-print("[DEBUG] SPOTIFY_CLIENT_SECRET:", os.getenv("SPOTIFY_CLIENT_SECRET"))
+# print("[DEBUG] Loaded SPOTIFY_CLIENT_ID:", os.getenv("SPOTIFY_CLIENT_ID"))
+# print("[DEBUG] SPOTIFY_CLIENT_SECRET:", os.getenv("SPOTIFY_CLIENT_SECRET"))
 print("[DEBUG] SPOTIFY_REDIRECT_URL:", os.getenv("SPOTIFY_REDIRECT_URL"))
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
