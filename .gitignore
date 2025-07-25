@@ -2,3 +2,6 @@ client_secrets.json
 .env
 .cache
 progress.txt
+.spotify_cache
+migration.log
+youtube_credentials.pickle

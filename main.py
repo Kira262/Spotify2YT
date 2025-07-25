@@ -1,17 +1,15 @@
 import os
 import time
-import spotipy
+import spotipy  # type: ignore
 from dotenv import load_dotenv
-from spotipy.oauth2 import SpotifyOAuth
-import google_auth_oauthlib.flow
-import googleapiclient.discovery
+from spotipy.oauth2 import SpotifyOAuth  # type: ignore
+import google_auth_oauthlib.flow  # type: ignore
+import googleapiclient.discovery  # type: ignore
 
 PROGRESS_FILE = "progress.txt"
 
 # Load .env variables
 load_dotenv()
-# print("[DEBUG] Loaded SPOTIFY_CLIENT_ID:", os.getenv("SPOTIFY_CLIENT_ID"))
-# print("[DEBUG] SPOTIFY_CLIENT_SECRET:", os.getenv("SPOTIFY_CLIENT_SECRET"))
 print("[DEBUG] SPOTIFY_REDIRECT_URL:", os.getenv("SPOTIFY_REDIRECT_URL"))
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
