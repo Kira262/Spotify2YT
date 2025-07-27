@@ -23,6 +23,9 @@ RETRY_ATTEMPTS = 3
 RETRY_DELAY = 5  # Increased base delay for async context
 CONCURRENT_REQUESTS = 10  # Max number of parallel API requests
 
+# Global flag to track quota exhaustion
+quota_exceeded = False
+
 # --- Setup Logging ---
 logging.basicConfig(
     level=logging.INFO,
@@ -134,6 +137,11 @@ async def async_search_youtube(
     session: aiohttp.ClientSession, query: str, creds: Credentials
 ) -> Optional[str]:
     """Asynchronously searches YouTube using aiohttp."""
+    global quota_exceeded
+
+    if quota_exceeded:
+        return None
+
     url = "https://www.googleapis.com/youtube/v3/search"
     headers = {"Authorization": f"Bearer {creds.token}"}
     params = {"part": "snippet", "q": query, "maxResults": 5, "type": "video"}
@@ -155,6 +163,12 @@ async def async_search_youtube(
                     )
                     return best_item["id"]["videoId"]
                 elif response.status in [403, 429]:  # Rate limit / Quota
+                    if attempt == RETRY_ATTEMPTS - 1:  # Last attempt failed
+                        logger.error(
+                            f"Quota exceeded after all retries for '{query}'. Stopping processing."
+                        )
+                        quota_exceeded = True
+                        return None
                     wait = RETRY_DELAY * (2**attempt)
                     logger.warning(
                         f"Search API limit hit for '{query}'. Waiting {wait}s."
@@ -176,6 +190,11 @@ async def async_add_to_playlist(
     session: aiohttp.ClientSession, playlist_id: str, video_id: str, creds: Credentials
 ) -> bool:
     """Asynchronously adds a video to a playlist."""
+    global quota_exceeded
+
+    if quota_exceeded:
+        return False
+
     url = "https://www.googleapis.com/youtube/v3/playlistItems"
     headers = {"Authorization": f"Bearer {creds.token}"}
     json_body = {
@@ -197,6 +216,12 @@ async def async_add_to_playlist(
                     logger.info(f"Video {video_id} is already in the playlist.")
                     return True
                 elif response.status in [403, 429]:
+                    if attempt == RETRY_ATTEMPTS - 1:  # Last attempt failed
+                        logger.error(
+                            f"Quota exceeded after all retries for video {video_id}. Stopping processing."
+                        )
+                        quota_exceeded = True
+                        return False
                     wait = RETRY_DELAY * (2**attempt)
                     logger.warning(
                         f"Add API limit hit for video {video_id}. Waiting {wait}s."
@@ -222,20 +247,39 @@ async def process_song_worker(
     creds: Credentials,
 ) -> Dict[str, Any]:
     """A worker that processes a single song, respecting the semaphore."""
+    global quota_exceeded
+
     async with semaphore:
+        if quota_exceeded:
+            logger.info(
+                f"[{song['id']}/{song['total']}] Skipping due to quota exceeded: {song['query']}"
+            )
+            song.update({"status": "quota_exceeded", "video_id": None})
+            return song
+
         logger.info(f"[{song['id']}/{song['total']}] Processing: {song['query']}")
         video_id = await async_search_youtube(session, song["query"], creds)
+
+        if quota_exceeded:
+            song.update({"status": "quota_exceeded", "video_id": None})
+            return song
 
         if video_id:
             if await async_add_to_playlist(session, playlist_id, video_id, creds):
                 logger.info(f"--> ✓ Added: {song['query']}")
                 song.update({"status": "added", "video_id": video_id})
             else:
-                logger.warning(f"--> ✗ Failed to add: {song['query']}")
-                song.update({"status": "failed_to_add", "video_id": video_id})
+                if quota_exceeded:
+                    song.update({"status": "quota_exceeded", "video_id": video_id})
+                else:
+                    logger.warning(f"--> ✗ Failed to add: {song['query']}")
+                    song.update({"status": "failed_to_add", "video_id": video_id})
         else:
-            logger.warning(f"--> ✗ Not found: {song['query']}")
-            song.update({"status": "not_found", "video_id": None})
+            if quota_exceeded:
+                song.update({"status": "quota_exceeded", "video_id": None})
+            else:
+                logger.warning(f"--> ✗ Not found: {song['query']}")
+                song.update({"status": "not_found", "video_id": None})
 
         return song
 
@@ -275,6 +319,9 @@ def save_progress(processed_indices: Set[int], song_data: dict):
 
 async def main():
     """Main async function to orchestrate the migration."""
+    global quota_exceeded
+    quota_exceeded = False  # Reset quota flag at start
+
     try:
         # --- 1. Synchronous Setup ---
         spotify_songs = get_spotify_liked_tracks()
@@ -308,20 +355,34 @@ async def main():
 
         async with aiohttp.ClientSession() as session:
             for song in songs_to_process:
+                if quota_exceeded:
+                    logger.info("Quota exceeded, stopping task creation.")
+                    break
                 task = process_song_worker(
                     semaphore, session, song, playlist_id, youtube_creds
                 )
                 tasks.append(task)
 
             # --- 3. Run Tasks Concurrently ---
-            results = await asyncio.gather(*tasks)
+            if tasks:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # --- 4. Process Results and Save ---
-            for res in results:
-                processed_indices.add(res["id"])
-                song_data[str(res["id"])] = res
+                # --- 4. Process Results and Save ---
+                for res in results:
+                    if isinstance(res, Exception):
+                        logger.error(f"Task failed with exception: {res}")
+                        continue
+                    processed_indices.add(res["id"])
+                    song_data[str(res["id"])] = res
 
-            save_progress(processed_indices, song_data)
+                save_progress(processed_indices, song_data)
+
+                if quota_exceeded:
+                    logger.info(
+                        "Migration stopped due to quota exceeded. Progress has been saved."
+                    )
+            else:
+                logger.info("No tasks were created due to quota exceeded.")
 
     except Exception as e:
         logger.critical(f"An unrecoverable error occurred: {e}", exc_info=True)
